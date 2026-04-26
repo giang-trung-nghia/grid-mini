@@ -1,0 +1,76 @@
+---
+alwaysApply: true
+---
+# grid-mini — Energy System Project Context
+
+This project is a mini energy management system inspired by GridBeyond. It simulates IoT-style energy consumption data, CAISO-like electricity market pricing, and real-time/batch data pipelines.
+
+---
+
+## Tech Stack
+
+**Backend**
+- Python + FastAPI (REST API, `APIRouter`, dependency injection)
+- Celery (async background jobs for ingestion and processing)
+- Pandas / NumPy (data processing and aggregation)
+
+**Databases**
+- InfluxDB — hot, real-time time-series data (power usage, market prices)
+- Microsoft SQL Server — metadata (sites, devices, contracts)
+- Azure Blob Storage — cold storage (raw CSVs, backups, archives)
+
+**Frontend**
+- ReactJS (dashboard visualization)
+
+---
+
+## System Design Principles
+
+- **Hot vs cold data separation**: InfluxDB for real-time queries, Blob Storage for raw/historical data
+- **Async ingestion**: always prefer Celery tasks over synchronous writes for data pipelines
+- **InfluxDB best practices**:
+  - Tags = low-cardinality identifiers (site_id, device_type)
+  - Fields = measured values (power_kw, price_usd)
+  - Never use high-cardinality values (UUIDs, timestamps) as tags
+
+---
+
+## Code Structure
+
+Follow production-grade separation of concerns:
+
+```
+app/
+  routers/      # FastAPI route handlers only — no business logic
+  services/     # Business logic, data processing, external integrations
+  models/       # Pydantic schemas, ORM models
+  tasks/        # Celery task definitions
+  db/           # DB clients and connection factories
+```
+
+- Keep routers thin — delegate everything to services
+- Use dependency injection (`Depends`) for DB sessions and shared resources
+- Never put business logic directly in route handlers
+
+---
+
+## Testing Rules
+
+- Use `pytest` for all tests
+- Test at the **service layer**, not the controller layer
+- Mock all external systems: InfluxDB, SQL Server, Azure Blob Storage
+- Tests must reflect real-world domain logic (energy thresholds, time-series windows, alerting conditions)
+- No trivial tests (e.g., testing that a dict has a key)
+
+---
+
+## AI Behavior
+
+When suggesting code or architecture:
+
+1. Always align with the tech stack above — do not introduce unlisted tools without justification
+2. Produce production-like code: routers, services, proper separation
+3. Avoid toy examples unless explicitly asked
+4. Explain **why**, not just what — relate decisions to real-world energy system concerns
+5. Prefer scalable, clean design over quick hacks
+6. When working with time-series data, always think about: window size, aggregation strategy, tag cardinality, and query performance
