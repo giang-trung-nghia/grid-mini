@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     INFLUX_ORG: str = "energy-org"
     INFLUX_BUCKET: str = "energy"
 
+    # --- Redis (Celery broker + result backend) ---
+    REDIS_URL: str = "redis://localhost:6379/0"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
