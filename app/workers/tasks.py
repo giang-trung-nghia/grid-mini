@@ -68,22 +68,72 @@ def slow_ping(self: Task, delay: int = 20) -> dict:
     max_retries=3,
     default_retry_delay=5,
 )
-def process_energy_reading(self: Task, site_id: str, payload: dict) -> dict:
+def process_energy_reading(self: Task, payload: dict) -> dict:
     """
-    Placeholder for the real ingestion task.
+    Ingest a single energy reading into InfluxDB.
 
-    Will eventually:
-      1. Validate the payload (pydantic schema)
-      2. Write the reading to InfluxDB (hot path)
-      3. Forward raw data to Azure Blob Storage (cold path)
+    Flow:
+      1. Deserialize the dict (came from Redis/JSON) back into an EnergyReading
+      2. Call the ingestion service to transform + write to InfluxDB
+      3. On transient failure, retry up to 3 times with 5s backoff
 
-    The retry config handles transient InfluxDB or network failures without
-    losing readings — important for IoT data where gaps corrupt aggregations.
+    The payload travels as a plain dict through Redis (JSON serializable).
+    We re-validate it with EnergyReading.from_dict() so bad data is caught
+    before it reaches the DB — not silently stored as garbage.
     """
+    from app.models.energy import EnergyReading
+    from app.services.ingestion import write_reading
+
+    reading = EnergyReading.from_dict(payload)
     logger.info(
-        "process_energy_reading received [site=%s, task_id=%s]",
-        site_id,
+        "process_energy_reading [site=%s, power_kw=%.2f, task_id=%s]",
+        reading.site_id,
+        reading.power_kw,
         self.request.id,
     )
-    # TODO: replace with real ingestion logic
-    return {"site_id": site_id, "status": "queued", "task_id": self.request.id}
+    try:
+        write_reading(reading)
+    except Exception as exc:
+        logger.warning(
+            "InfluxDB write failed, retrying [attempt=%d, error=%s]",
+            self.request.retries + 1,
+            exc,
+        )
+        raise self.retry(exc=exc)
+
+    return {
+        "site_id": reading.site_id,
+        "power_kw": reading.power_kw,
+        "timestamp": reading.timestamp.isoformat(),
+        "status": "written",
+        "task_id": self.request.id,
+    }
+
+
+@celery_app.task(bind=True, name="workers.simulate_and_ingest")
+def simulate_and_ingest(self: Task, site_id: str | None = None) -> dict:
+    """
+    Generate a fake reading and ingest it in one shot.
+
+    Useful for manual testing and demo — triggers the full pipeline:
+      simulator → model → service → InfluxDB
+
+    Usage:
+      simulate_and_ingest.delay()                # random site
+      simulate_and_ingest.delay(site_id="site-001")
+    """
+    from app.simulators.energy import mock_generate_reading
+    from app.services.ingestion import write_reading
+
+    reading = mock_generate_reading(site_id)
+    logger.info(
+        "simulated reading [site=%s, power_kw=%.2f]", reading.site_id, reading.power_kw
+    )
+    write_reading(reading)
+    return {
+        "site_id": reading.site_id,
+        "power_kw": reading.power_kw,
+        "timestamp": reading.timestamp.isoformat(),
+        "status": "written",
+        "task_id": self.request.id,
+    }

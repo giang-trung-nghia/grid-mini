@@ -4,6 +4,7 @@ from fastapi import FastAPI
 
 from app.db.influx import influx_manager
 from app.db.sql import check_connection as sql_check
+from app.routers import power
 
 
 @asynccontextmanager
@@ -21,6 +22,8 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+app.include_router(power.router)
 
 
 @app.get("/")

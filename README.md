@@ -8,3 +8,6 @@ step2: run backend
 
 step3: run celery
 `celery -A app.workers.celery_app worker --pool=solo --loglevel=info`
+
+step4: beat celery
+`celery -A app.workers.celery_app beat --loglevel=info`
