@@ -124,5 +124,12 @@ celery_app.conf.update(
             # site_id=None → simulator picks a random site each tick
             "kwargs": {"site_id": None},
         },
+        # Time-based flush: drain the archive buffer every 30 seconds.
+        # Acts as a safety net for low-traffic periods where the buffer
+        # never reaches ARCHIVE_FLUSH_BATCH_SIZE on its own.
+        "flush-archive-buffer-every-30s": {
+            "task": "workers.flush_archive_buffer",
+            "schedule": 30.0,
+        },
     },
 )
